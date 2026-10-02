@@ -9,7 +9,7 @@ public sealed class RecentReposStore
 {
     private const int MaxEntries = 10;
     private readonly string _file;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public RecentReposStore()
     {

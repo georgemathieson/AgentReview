@@ -26,7 +26,7 @@ AgentReview fixes this:
 
 ## Run
 
-Requires the .NET 8 SDK and `git` on your PATH.
+Requires the .NET 10 SDK and `git` on your PATH.
 
 ```bash
 dotnet run --project src/AgentReview.Web
@@ -38,6 +38,13 @@ Open http://localhost:5195, then:
 2. Pick the branch with the changes (head) and the branch to compare with (base), then click **Show diff**.
 3. On the diff page, use **Download .md** to save the AI-ready Markdown, or switch to **Visual diff** for a
    colour-coded view of exactly the same regions.
+
+To run it without the SDK tooling, publish once and start the DLL:
+
+```bash
+dotnet publish src/AgentReview.Web -c Release -o ./publish
+dotnet ./publish/AgentReview.Web.dll
+```
 
 The app listens on localhost only. It runs read-only git commands (`for-each-ref`, `rev-parse`,
 `merge-base`, `diff`, `cat-file`) and never changes your repository.
@@ -59,7 +66,7 @@ per run under **Advanced options**.
 
 - `src/AgentReview.Core`: git access, the merged diff model, region strategies (Roslyn C#, SQL,
   indentation blocks) and the Markdown formatter. It has no UI dependencies, so a CLI could reuse it.
-- `src/AgentReview.Web`: the Blazor Web App (.NET 8, interactive server rendering).
+- `src/AgentReview.Web`: the Blazor Web App (.NET 10, interactive server rendering).
 - `tests/AgentReview.Core.Tests`: xUnit tests that create real temporary git repositories.
 
 ```bash
