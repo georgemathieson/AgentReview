@@ -1,0 +1,193 @@
+@page "/"
+@inject RecentReposStore Recent
+@inject ReviewOptions DefaultOptions
+@inject NavigationManager Nav
+
+<PageTitle>AgentReview: choose branches</PageTitle>
+
+<h1 class="h3 mb-3">Compare two branches</h1>
+
+<section class="card mb-3">
+    <div class="card-body">
+        <label for="repo" class="form-label fw-semibold">1. Local repository path</label>
+        <div class="input-group">
+            <input id="repo" class="form-control font-monospace" list="recent-repos" placeholder="C:\src\MyProject or ~/src/my-project"
+                   @bind="repoPath" @bind:event="oninput" @onkeydown="OnRepoKeyDown" />
+            <button class="btn btn-primary" @onclick="LoadBranchesAsync" disabled="@(loading || string.IsNullOrWhiteSpace(repoPath))">
+                @(loading ? "Loading…" : "Load branches")
+            </button>
+        </div>
+        <datalist id="recent-repos">
+            @foreach (var r in recent)
+            {
+                <option value="@r.Path"></option>
+            }
+        </datalist>
+
+        @if (recent.Count > 0 && branches is null)
+        {
+            <div class="mt-2 small text-muted">
+                Recent:
+                @foreach (var r in recent)
+                {
+                    <button class="btn btn-link btn-sm p-0 me-3 font-monospace" @onclick="() => PickRecentAsync(r.Path)">@r.Path</button>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (branches is not null)
+{
+    <section class="card mb-3">
+        <div class="card-body">
+            <div class="fw-semibold mb-2">2. Branches <span class="text-muted fw-normal small">in <code>@repoRoot</code></span></div>
+            <div class="row g-3 align-items-end">
+                <div class="col-md-5">
+                    <label for="head" class="form-label">Branch with the changes (head)</label>
+                    <BranchSelect Id="head" Branches="branches" @bind-Value="headRef" />
+                </div>
+                <div class="col-md-2 text-center pb-2 text-muted">compared with</div>
+                <div class="col-md-5">
+                    <label for="base" class="form-label">Branch to diff against (base)</label>
+                    <BranchSelect Id="base" Branches="branches" @bind-Value="baseRef" />
+                </div>
+            </div>
+            <p class="small text-muted mt-2 mb-0">
+                Pull-request style: shows only what <code>@(headRef ?? "head")</code> changed since it branched from <code>@(baseRef ?? "base")</code>.
+            </p>
+
+            <details class="mt-3">
+                <summary class="small">Advanced options</summary>
+                <div class="row g-3 mt-1">
+                    <div class="col-sm-4">
+                        <label class="form-label small">Fallback context lines</label>
+                        <input type="number" min="0" max="100" class="form-control form-control-sm" @bind="options.ContextLines" />
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label small">Max lines of a unit shown in full</label>
+                        <input type="number" min="10" max="10000" class="form-control form-control-sm" @bind="options.MaxUnitLines" />
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label small">Show non-C# files in full up to (lines)</label>
+                        <input type="number" min="0" max="10000" class="form-control form-control-sm" @bind="options.SmallFileLines" />
+                    </div>
+                </div>
+            </details>
+
+            <button class="btn btn-success mt-3" @onclick="Compare" disabled="@(!CanCompare)">Show diff →</button>
+            @if (baseRef is not null && baseRef == headRef)
+            {
+                <span class="text-danger small ms-2">Pick two different branches.</span>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "repo")] public string? RepoQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "base")] public string? BaseQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "head")] public string? HeadQuery { get; set; }
+
+    private static readonly string[] PreferredBases = ["main", "master", "develop", "origin/main", "origin/master", "origin/develop"];
+
+    private IReadOnlyList<RecentRepo> recent = [];
+    private string repoPath = "";
+    private string? repoRoot;
+    private IReadOnlyList<BranchInfo>? branches;
+    private string? baseRef;
+    private string? headRef;
+    private string? error;
+    private bool loading;
+    private ReviewOptions options = new();
+
+    private bool CanCompare => repoRoot is not null && !string.IsNullOrEmpty(baseRef) && !string.IsNullOrEmpty(headRef) && baseRef != headRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        options = new ReviewOptions
+        {
+            ContextLines = DefaultOptions.ContextLines,
+            MaxUnitLines = DefaultOptions.MaxUnitLines,
+            SmallFileLines = DefaultOptions.SmallFileLines,
+        };
+        recent = Recent.GetAll();
+        if (!string.IsNullOrWhiteSpace(RepoQuery))
+        {
+            repoPath = RepoQuery;
+            await LoadBranchesAsync();
+        }
+    }
+
+    private async Task OnRepoKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await LoadBranchesAsync();
+    }
+
+    private async Task PickRecentAsync(string path)
+    {
+        repoPath = path;
+        await LoadBranchesAsync();
+    }
+
+    private async Task LoadBranchesAsync()
+    {
+        loading = true;
+        error = null;
+        branches = null;
+        try
+        {
+            var repo = await GitRepository.OpenAsync(repoPath);
+            repoRoot = repo.Root;
+            var list = await repo.GetBranchesAsync();
+            if (list.Count == 0)
+                throw new GitException("This repository has no branches yet.");
+
+            var names = list.Select(b => b.Name).ToHashSet();
+            var remembered = Recent.Find(repo.Root);
+            string? Valid(params string?[] candidates) => candidates.FirstOrDefault(c => c is not null && names.Contains(c));
+
+            // If a mainline branch is checked out, it is probably the base; the head is then the most recently updated other branch.
+            var current = list.FirstOrDefault(b => b.IsCurrent)?.Name;
+            var currentIsMainline = current is not null && PreferredBases.Contains(current);
+            var newestOther = list.Where(b => !b.IsRemote && b.Name != current).MaxBy(b => b.LastCommit)?.Name;
+
+            headRef = Valid(HeadQuery, remembered?.LastHead, currentIsMainline ? newestOther : current) ?? list[0].Name;
+            baseRef = Valid([BaseQuery, remembered?.LastBase, .. PreferredBases.Where(b => b != headRef)])
+                      ?? list.FirstOrDefault(b => b.Name != headRef)?.Name;
+            branches = list;
+        }
+        catch (GitException ex)
+        {
+            repoRoot = null;
+            error = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void Compare()
+    {
+        if (!CanCompare)
+            return;
+        Recent.Remember(repoRoot!, baseRef!, headRef!);
+        var url = Nav.GetUriWithQueryParameters(Nav.ToAbsoluteUri("diff").ToString(), new Dictionary<string, object?>
+        {
+            ["repo"] = repoRoot,
+            ["base"] = baseRef,
+            ["head"] = headRef,
+            ["context"] = options.ContextLines,
+            ["maxUnit"] = options.MaxUnitLines,
+            ["smallFile"] = options.SmallFileLines,
+        });
+        Nav.NavigateTo(url);
+    }
+}

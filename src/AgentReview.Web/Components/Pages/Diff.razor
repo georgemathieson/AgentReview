@@ -1,0 +1,129 @@
+@page "/diff"
+@implements IDisposable
+@inject ReviewBuilder Builder
+@inject ReviewOptions DefaultOptions
+@inject IJSRuntime JS
+
+<PageTitle>AgentReview: @Head vs @Base</PageTitle>
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <h1 class="h4 m-0 me-auto">
+        <code>@Head</code> <span class="text-muted fw-normal">compared with</span> <code>@Base</code>
+    </h1>
+    <a class="btn btn-outline-secondary btn-sm" href="@ChangeBranchesUrl">← Change branches</a>
+    <button class="btn btn-primary btn-sm" @onclick="DownloadAsync" disabled="@(markdown is null)">Download .md</button>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+else if (review is null)
+{
+    <div class="d-flex align-items-center gap-2 text-muted">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        Building diff…
+    </div>
+}
+else
+{
+    <p class="text-muted small">
+        <code>@Repo</code> · merge-base <code>@review.MergeBaseSha[..10]</code> → head <code>@review.HeadSha[..10]</code> ·
+        @review.Files.Count file(s), <span class="text-success">+@review.Additions</span> <span class="text-danger">−@review.Deletions</span>
+    </p>
+
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <button class="nav-link @(tab == Tab.Markdown ? "active" : "")" @onclick="() => tab = Tab.Markdown">AI output (Markdown)</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(tab == Tab.Visual ? "active" : "")" @onclick="() => tab = Tab.Visual">Visual diff</button>
+        </li>
+    </ul>
+
+    @if (tab == Tab.Markdown)
+    {
+        <p class="small text-muted">
+            About @ApproxTokens(markdown!) tokens (estimated). This text is what the Download button saves.
+        </p>
+        <pre class="markdown-output">@markdown</pre>
+    }
+    else
+    {
+        <DiffView Review="review" />
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery] public string? Repo { get; set; }
+    [SupplyParameterFromQuery] public string? Base { get; set; }
+    [SupplyParameterFromQuery] public string? Head { get; set; }
+    [SupplyParameterFromQuery] public int? Context { get; set; }
+    [SupplyParameterFromQuery] public int? MaxUnit { get; set; }
+    [SupplyParameterFromQuery] public int? SmallFile { get; set; }
+
+    private enum Tab { Markdown, Visual }
+
+    private readonly CancellationTokenSource cts = new();
+    private ReviewResult? review;
+    private string? markdown;
+    private string? error;
+    private Tab tab = Tab.Markdown;
+
+    private string ChangeBranchesUrl =>
+        $"/?repo={Uri.EscapeDataString(Repo ?? "")}&base={Uri.EscapeDataString(Base ?? "")}&head={Uri.EscapeDataString(Head ?? "")}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        review = null;
+        markdown = null;
+        error = null;
+        if (string.IsNullOrWhiteSpace(Repo) || string.IsNullOrWhiteSpace(Base) || string.IsNullOrWhiteSpace(Head))
+        {
+            error = "Missing repository or branch. Go back and choose two branches.";
+            return;
+        }
+
+        var options = new ReviewOptions
+        {
+            ContextLines = Math.Clamp(Context ?? DefaultOptions.ContextLines, 0, 100),
+            MaxUnitLines = Math.Clamp(MaxUnit ?? DefaultOptions.MaxUnitLines, 10, 10_000),
+            SmallFileLines = Math.Clamp(SmallFile ?? DefaultOptions.SmallFileLines, 0, 10_000),
+            MaxWholeFileLines = DefaultOptions.MaxWholeFileLines,
+            OmitContentPatterns = DefaultOptions.OmitContentPatterns,
+        };
+
+        try
+        {
+            review = await Task.Run(() => Builder.BuildAsync(Repo, Base, Head, options, cts.Token), cts.Token);
+            markdown = MarkdownFormatter.Format(review);
+        }
+        catch (GitException ex)
+        {
+            error = ex.Message;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (markdown is null)
+            return;
+        var name = $"review-{Sanitize(Head!)}-vs-{Sanitize(Base!)}.md";
+        await JS.InvokeVoidAsync("agentReview.downloadText", name, markdown);
+    }
+
+    private static string Sanitize(string value) =>
+        string.Concat(value.Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' or '.' ? c : '-'));
+
+    // Rough rule of thumb: ~4 characters per token for code.
+    private static string ApproxTokens(string text) => (text.Length / 4).ToString("N0");
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
+    }
+}

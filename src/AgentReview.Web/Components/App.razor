@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <ResourcePreloader />
+    <link rel="stylesheet" href="@Assets["bootstrap/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="icon" type="image/png" href="@Assets["favicon.png"]" />
+    <HeadOutlet @rendermode="RenderModeNoPrerender" />
+</head>
+
+<body>
+    <Routes @rendermode="RenderModeNoPrerender" />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="@Assets["js/download.js"]"></script>
+</body>
+
+</html>
+
+@code {
+    // Prerendering would run git twice per page load (once to prerender, once when interactive).
+    private static readonly IComponentRenderMode RenderModeNoPrerender = new InteractiveServerRenderMode(prerender: false);
+}

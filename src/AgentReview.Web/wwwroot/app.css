@@ -1,0 +1,52 @@
+:root {
+    --added-bg: #e6ffec;
+    --added-mk: #1a7f37;
+    --removed-bg: #ffebe9;
+    --removed-mk: #cf222e;
+    --region-bg: #ddf4ff;
+    --gap-bg: #f6f8fa;
+    --border: #d0d7de;
+}
+
+body { background: #fff; color: #1f2328; }
+
+.app-header {
+    display: flex; align-items: baseline; gap: 1rem;
+    padding: .75rem 1.5rem; border-bottom: 1px solid var(--border); background: #f6f8fa;
+}
+.app-title { font-weight: 700; font-size: 1.15rem; color: inherit; text-decoration: none; }
+.app-tagline { color: #59636e; font-size: .9rem; }
+.app-main { padding: 1.5rem; max-width: 1400px; margin: 0 auto; }
+
+.markdown-output {
+    background: var(--gap-bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 1rem; font-size: .8rem; white-space: pre-wrap; word-break: break-word; tab-size: 4;
+    max-height: 75vh; overflow: auto;
+}
+
+.diff-file { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 1rem; overflow: hidden; }
+.diff-file > summary { padding: .5rem .75rem; background: #f6f8fa; cursor: pointer; border-bottom: 1px solid var(--border); }
+.diff-note { padding: .5rem .75rem; color: #59636e; font-style: italic; }
+
+.diff-table { width: 100%; border-collapse: collapse; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .8rem; }
+.diff-table td { padding: 0 .5rem; vertical-align: top; }
+.diff-table td.ln { width: 1%; min-width: 3.5em; text-align: right; color: #8c959f; user-select: none; }
+.diff-table td.mk { width: 1%; user-select: none; font-weight: 700; }
+.diff-table td.code { white-space: pre-wrap; word-break: break-all; tab-size: 4; }
+.diff-row.added { background: var(--added-bg); }
+.diff-row.added td.mk { color: var(--added-mk); }
+.diff-row.removed { background: var(--removed-bg); }
+.diff-row.removed td.mk { color: var(--removed-mk); }
+.diff-region td { background: var(--region-bg); color: #0969da; padding: .25rem .5rem; font-family: system-ui, sans-serif; }
+.diff-gap td { background: var(--gap-bg); color: #59636e; text-align: center; padding: .2rem; font-family: system-ui, sans-serif; }
+
+.badge.status-added { background: var(--added-mk); }
+.badge.status-deleted { background: var(--removed-mk); }
+.badge.status-modified, .badge.status-typechanged { background: #9a6700; }
+.badge.status-renamed, .badge.status-copied { background: #8250df; }
+
+#blazor-error-ui {
+    background: lightyellow; bottom: 0; box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none; left: 0; padding: 0.6rem 1.25rem 0.7rem 1.25rem; position: fixed; width: 100%; z-index: 1000;
+}
+#blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: 0.75rem; top: 0.5rem; }
