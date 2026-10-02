@@ -1,0 +1,26 @@
+<select id="@Id" class="form-select font-monospace" value="@Value" @onchange="OnChange">
+    <optgroup label="Local branches">
+        @foreach (var b in Branches.Where(b => !b.IsRemote))
+        {
+            <option value="@b.Name">@b.Name@(b.IsCurrent ? "  (checked out)" : "")</option>
+        }
+    </optgroup>
+    @if (Branches.Any(b => b.IsRemote))
+    {
+        <optgroup label="Remote branches">
+            @foreach (var b in Branches.Where(b => b.IsRemote))
+            {
+                <option value="@b.Name">@b.Name</option>
+            }
+        </optgroup>
+    }
+</select>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<BranchInfo> Branches { get; set; } = [];
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string? Id { get; set; }
+
+    private Task OnChange(ChangeEventArgs e) => ValueChanged.InvokeAsync(e.Value?.ToString());
+}

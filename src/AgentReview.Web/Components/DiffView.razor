@@ -1,0 +1,65 @@
+@* Human-readable rendering of the same regions the AI output contains. *@
+
+@foreach (var file in Review.Files)
+{
+    <details class="diff-file" open>
+        <summary>
+            <span class="badge status-@file.File.Status.ToString().ToLowerInvariant()">@MarkdownFormatter.StatusText(file.File)</span>
+            <code class="ms-1">@file.Path</code>
+            @if (file.File.OldPath is not null)
+            {
+                <span class="text-muted small"> (was <code>@file.File.OldPath</code>)</span>
+            }
+            <span class="ms-2 small text-success">+@file.Additions</span>
+            <span class="small text-danger">−@file.Deletions</span>
+        </summary>
+
+        @if (file.Note is not null)
+        {
+            <div class="diff-note">@file.Note</div>
+        }
+
+        @if (file.Regions.Count > 0)
+        {
+            <table class="diff-table">
+                @for (var r = 0; r < file.Regions.Count; r++)
+                {
+                    var region = file.Regions[r];
+                    var gapStart = r == 0 ? 0 : file.Regions[r - 1].EndRow + 1;
+                    if (region.StartRow > gapStart)
+                    {
+                        <tr class="diff-gap"><td colspan="4">⋯ @(region.StartRow - gapStart) unchanged line(s) ⋯</td></tr>
+                    }
+                    <tr class="diff-region">
+                        <td colspan="4">
+                            @string.Join("; ", region.Descriptions).Replace("`", "")
+                            @foreach (var note in region.Notes)
+                            {
+                                <div class="text-warning-emphasis">@note</div>
+                            }
+                        </td>
+                    </tr>
+                    @for (var i = region.StartRow; i <= region.EndRow; i++)
+                    {
+                        var row = file.Rows[i];
+                        <tr class="diff-row @row.Kind.ToString().ToLowerInvariant()">
+                            <td class="ln">@row.OldLine</td>
+                            <td class="ln">@row.NewLine</td>
+                            <td class="mk">@(row.Kind switch { RowKind.Added => "+", RowKind.Removed => "−", _ => "" })</td>
+                            <td class="code">@row.Text</td>
+                        </tr>
+                    }
+                }
+                @{ var trailing = file.Rows.Count - 1 - file.Regions[^1].EndRow; }
+                @if (trailing > 0)
+                {
+                    <tr class="diff-gap"><td colspan="4">⋯ @trailing unchanged line(s) ⋯</td></tr>
+                }
+            </table>
+        }
+    </details>
+}
+
+@code {
+    [Parameter, EditorRequired] public ReviewResult Review { get; set; } = default!;
+}
